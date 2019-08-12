@@ -20,7 +20,7 @@ static float lenght = 100;
 // koordinate glavnog objekta
 static float x_coord = 0;
 static float y_coord = 0;
-static float z_coord = 10;
+static float z_coord = 5;
 static float r = 1;
 float rotate_object = 0;
 
@@ -145,7 +145,7 @@ static void on_reshape(int width, int height)
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(60, (double)width / height, 1, 100);
+    gluPerspective(60, (double)width / height, 1, 50);
 }
 
 static void on_display(void)
@@ -171,7 +171,7 @@ static void set_camera()
 {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(x_coord, y_coord + 5, z_coord - 7, x_coord, y_coord, z_coord + 7, 0, 1, 0);
+    gluLookAt(x_coord, y_coord + 5, z_coord - 5, x_coord, y_coord, z_coord + 7, 0, 1, 0);
 }
 
 static void set_lights()
@@ -349,7 +349,7 @@ static void set_obstacles(int type)
             if (free_positions[pos] == 0)
             {
                 o.x = positions[pos];
-                o.y = 1;
+                o.y = 0.5;
                 if (type == 1)
                 {
                     o.z = z_plane - 100 + i * 20;
