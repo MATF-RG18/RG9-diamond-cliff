@@ -27,10 +27,10 @@ float rotate_object = 0;
 // dimenzije staze
 static float x_plane = 10;
 static float y_plane = 1;
-static float z_plane = 100;
+static float z_plane = 50;
 static float x_plane2 = 10;
 static float y_plane2 = 1;
-static float z_plane2 = 200;
+static float z_plane2 = 150;
 
 typedef struct
 {
@@ -204,23 +204,13 @@ static void draw_plane()
     glMaterialf(GL_FRONT, GL_SHININESS, shininess);
 
     glPushMatrix();
-    glTranslatef(0, -y_plane / 2, z_plane / 2);
+    glTranslatef(0, -y_plane / 2, z_plane);
     glScalef(x_plane, -y_plane / 2, lenght);
     glutSolidCube(1);
     glPopMatrix();
 
-    GLfloat material_ambient1[] = {0.2125, 0.1275, 0.054, 1.0};
-    GLfloat material_diffuse1[] = {0.714, 0.4284, 0.18144, 1.0};
-    GLfloat material_specular1[] = {0.393548, 0.271906, 0.166721, 1.0};
-    GLfloat shininess1 = 0.2;
-
-    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient1);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse1);
-    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular1);
-    glMaterialf(GL_FRONT, GL_SHININESS, shininess1);
-
     glPushMatrix();
-    glTranslatef(0, -y_plane2 / 2, z_plane2 / 2 + lenght / 2);
+    glTranslatef(0, -y_plane2 / 2, z_plane2);
     glScalef(x_plane2, -y_plane2 / 2, lenght);
     glutSolidCube(1);
     glPopMatrix();
@@ -261,15 +251,15 @@ static void move_objects(int value)
         obstacles2[i].z -= 0.5;
 
     printf("%f %f\n", z_plane, z_plane2);
-    if (z_plane + 50 < 0)
+    if (z_plane + 50 <= 0)
     {
-        z_plane = 200;
+        z_plane = 150;
         set_obstacles(1);
         printf("Menjam prvu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
     }
-    if (z_plane2 + 50 < 0)
+    if (z_plane2 + 50 <= 0)
     {
-        z_plane2 = 200;
+        z_plane2 = 150;
         set_obstacles(2);
         printf("Menjam drugu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
     }
