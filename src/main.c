@@ -408,10 +408,11 @@ static void set_obstacles(int type)
     else
         pos2 = 0;
 
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 10; i++)
     {
-        int num = (int)(rand() % 5 + 3) % 5;
-        num = max(3, num);
+        int num = (int)rand() % 5;
+        if (num == 0)
+            num = 2;
         int diamond = 0;
         int hole = 0;
         for (int j = 0; j < num; j++)
@@ -445,13 +446,13 @@ static void set_obstacles(int type)
                 o.x = positions[pos];
                 if (type == 1)
                 {
-                    o.z = z_plane + 50 - i * 20;
+                    o.z = z_plane + 50 - i * 10;
                     obstacles1[pos1++] = o;
                     printf("1 : %f %f %f\n", o.x, o.y, o.z);
                 }
                 else
                 {
-                    o.z = z_plane2 + 50 - i * 20;
+                    o.z = z_plane2 + 50 - i * 10;
                     obstacles2[pos2++] = o;
                     printf("2 : %f %f %f\n", o.x, o.y, o.z);
                 }
