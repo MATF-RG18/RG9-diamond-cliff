@@ -13,6 +13,9 @@
 static float fi = 0;
 static float jump_speed = 0.1;
 
+static float speed = 0.5;
+static float counter = 0;
+
 // indikatori za pocetak i kraj igre
 static int start = 0;
 static int end = 0;
@@ -269,16 +272,18 @@ static void move_objects(int value)
     if (value != 0)
         return;
 
-    z_plane -= 0.5;
-    z_plane2 -= 0.5;
+    z_plane -= speed;
+    z_plane2 -= speed;
 
     for (int i = 0; i < pos1; i++)
-        obstacles1[i].z -= 0.5;
+        obstacles1[i].z -= speed;
 
     for (int i = 0; i < pos2; i++)
-        obstacles2[i].z -= 0.5;
+        obstacles2[i].z -= speed;
 
     //printf("%f %f\n", z_plane, z_plane2);
+
+    // FIXME: postoji mali razmak izmedju 2 ravni
 
     //kad jedna ravan izadje iz vidokruga kamere
     //vracamo je na kraj druge ravni i na toj ravni
@@ -286,12 +291,14 @@ static void move_objects(int value)
     if (z_plane + 50 <= 0)
     {
         z_plane = 150;
+        speed += 0.05;
         set_obstacles(1);
         //printf("Menjam prvu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
     }
     if (z_plane2 + 50 <= 0)
     {
         z_plane2 = 150;
+        speed += 0.05;
         set_obstacles(2);
         //printf("Menjam drugu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
     }
@@ -307,7 +314,7 @@ static void move_objects(int value)
 }
 
 // funkcija koja obradjuje skok
-// !!! FIXME : pomera se samo kamera, ne i loptica
+// FIXME : pomera se samo kamera, ne i loptica
 static void on_jump(int value)
 {
     if (value != 0)
@@ -381,22 +388,15 @@ static void draw_obstacles(int type)
         // ako je tip prepreke 2 crta se rupa
         else if (o.type == 2)
         {
-            GLfloat material_ambient1[] = {0.0, 0.0, 0.0, 1.0};
-            GLfloat material_diffuse1[] = {0.01, 0.01, 0.01, 1.0};
-            GLfloat material_specular1[] = {0.5, 0.5, 0.5, 1.0};
-            GLfloat shininess1 = 0.25;
-
-            glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient1);
-            glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse1);
-            glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular1);
-            glMaterialf(GL_FRONT, GL_SHININESS, shininess1);
-
             //FIXME: popravi velicinu rupe kad namestis da se lepo iscrtava
+            glDisable(GL_LIGHTING);
+            glColor3f(0, 0, 0);
             glPushMatrix();
             glTranslatef(o.x, o.y, o.z);
-            glScalef(2, 2, 2);
+            glScalef(2, 1.6, 2);
             glutSolidCube(1);
             glPopMatrix();
+            glEnable(GL_LIGHTING);
         }
     }
 }
