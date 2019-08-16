@@ -7,6 +7,9 @@
 #define TIMER_ID1 0
 #define PI 3.14
 
+#define max(a, b) a > b ? a : b
+
+// ugao za koji ce loptica da se pomera pri skoku
 static float fi = 0;
 static float jump_speed = 0.1;
 
@@ -15,6 +18,7 @@ static int start = 0;
 static int end = 0;
 static int jump = 0;
 
+// duzina staza
 static float lenght = 100;
 
 // koordinate glavnog objekta
@@ -32,11 +36,16 @@ static float x_plane2 = 10;
 static float y_plane2 = 1;
 static float z_plane2 = 150;
 
+// svaka prepreka sadrzi kordinate i tip
+// 0 - dijamant
+// 1 - obicna kocka
+// 2 - rupa
 typedef struct
 {
     float x;
     float y;
     float z;
+    int type;
 } Obstacle;
 
 Obstacle obstacles1[50];
@@ -59,6 +68,7 @@ static void draw_plane();
 static void draw_main_object();
 static void draw_obstacles(int type);
 static void move_objects();
+static void set_first();
 static void set_obstacles(int type);
 
 int main(int argc, char **argv)
@@ -109,10 +119,10 @@ static void on_keyboard(unsigned char key, int x, int y)
             start = 1;
         }
         break;
-    case 'p':
-        // igra se pauzira
-        start = 0;
-        break;
+        // case 'p':
+        //     // igra se pauzira
+        //     start = 0;
+        //     break;
 
     case 'a':
     case 'A':
@@ -158,9 +168,17 @@ static void on_display(void)
     draw_plane();
     draw_main_object();
 
+    // na pocetku se postavljaju prepreke na drugu ravan
+    // i na drugi deo prve ravni koji se ne vidi pri pokretanju programa
+    // a zatim se ostale prepreke postavljaju u tajmeru
     if (!start)
-        set_obstacles(1);
+    {
+        printf("Postavljam prvi");
+        set_first();
+        set_obstacles(2);
+    }
 
+    // crtaju se prepreke
     draw_obstacles(1);
     draw_obstacles(2);
 
@@ -209,6 +227,16 @@ static void draw_plane()
     glutSolidCube(1);
     glPopMatrix();
 
+    GLfloat material_ambient1[] = {0.2125, 0.1275, 0.054, 1.0};
+    GLfloat material_diffuse1[] = {0.714, 0.4284, 0.18144, 1.0};
+    GLfloat material_specular1[] = {0.393548, 0.271906, 0.166721, 1.0};
+    GLfloat shininess1 = 0.2;
+
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient1);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse1);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular1);
+    glMaterialf(GL_FRONT, GL_SHININESS, shininess1);
+
     glPushMatrix();
     glTranslatef(0, -y_plane2 / 2, z_plane2);
     glScalef(x_plane2, -y_plane2 / 2, lenght);
@@ -222,7 +250,7 @@ static void draw_main_object()
     GLfloat material_ambient[] = {0.2125, 0.1275, 0.054, 1.0};
     GLfloat material_diffuse[] = {0.714, 0.4284, 0.18144, 1.0};
     GLfloat material_specular[] = {0.393548, 0.271906, 0.166721, 1.0};
-    GLfloat shininess = 0.2;
+    GLfloat shininess = 60;
 
     glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
@@ -232,7 +260,7 @@ static void draw_main_object()
     glPushMatrix();
     glTranslatef(x_coord, r, z_coord + 2);
     glRotatef(rotate_object, 1, 0, 0);
-    glutSolidSphere(r, 30, 30);
+    glutSolidSphere(r, 50, 50);
     glPopMatrix();
 }
 
@@ -250,21 +278,26 @@ static void move_objects(int value)
     for (int i = 0; i < pos2; i++)
         obstacles2[i].z -= 0.5;
 
-    printf("%f %f\n", z_plane, z_plane2);
+    //printf("%f %f\n", z_plane, z_plane2);
+
+    //kad jedna ravan izadje iz vidokruga kamere
+    //vracamo je na kraj druge ravni i na toj ravni
+    // ponovo postavljamo prepreke
     if (z_plane + 50 <= 0)
     {
         z_plane = 150;
         set_obstacles(1);
-        printf("Menjam prvu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
+        //printf("Menjam prvu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
     }
     if (z_plane2 + 50 <= 0)
     {
         z_plane2 = 150;
         set_obstacles(2);
-        printf("Menjam drugu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
+        //printf("Menjam drugu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
     }
-    rotate_object += 30;
 
+    // rotiramo kuglu sve vreme
+    rotate_object += 30;
     if (rotate_object >= 360)
         rotate_object += -360;
 
@@ -273,6 +306,8 @@ static void move_objects(int value)
         glutTimerFunc(50, move_objects, 0);
 }
 
+// funkcija koja obradjuje skok
+// !!! FIXME : pomera se samo kamera, ne i loptica
 static void on_jump(int value)
 {
     if (value != 0)
@@ -295,6 +330,9 @@ static void on_jump(int value)
         glutTimerFunc(50, on_jump, 0);
 }
 
+// icrtavamo prepreke razlicitih tipova
+// koje su postavljene u nizovima obstacles1
+// i obstacles2
 static void draw_obstacles(int type)
 {
     int len = 0;
@@ -322,11 +360,44 @@ static void draw_obstacles(int type)
         glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
         glMaterialf(GL_FRONT, GL_SHININESS, shininess);
 
-        glPushMatrix();
-        glTranslatef(o.x, o.y, o.z);
-        glScalef(2, 2, 2);
-        glutSolidCube(1);
-        glPopMatrix();
+        // ako je tip prepreke 0 crta se dijamant
+        if (o.type == 0)
+        {
+            glPushMatrix();
+            glTranslatef(o.x, o.y, o.z);
+            glScalef(0.6, 0.6, 0.6);
+            glutSolidIcosahedron();
+            glPopMatrix();
+        }
+        // ako je tip prepreke 1 crta se obicna kocka
+        else if (o.type == 1)
+        {
+            glPushMatrix();
+            glTranslatef(o.x, o.y, o.z);
+            glScalef(2, 2, 2);
+            glutSolidCube(1);
+            glPopMatrix();
+        }
+        // ako je tip prepreke 2 crta se rupa
+        else if (o.type == 2)
+        {
+            GLfloat material_ambient1[] = {0.0, 0.0, 0.0, 1.0};
+            GLfloat material_diffuse1[] = {0.01, 0.01, 0.01, 1.0};
+            GLfloat material_specular1[] = {0.5, 0.5, 0.5, 1.0};
+            GLfloat shininess1 = 0.25;
+
+            glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient1);
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse1);
+            glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular1);
+            glMaterialf(GL_FRONT, GL_SHININESS, shininess1);
+
+            //FIXME: popravi velicinu rupe kad namestis da se lepo iscrtava
+            glPushMatrix();
+            glTranslatef(o.x, o.y, o.z);
+            glScalef(2, 2, 2);
+            glutSolidCube(1);
+            glPopMatrix();
+        }
     }
 }
 
@@ -337,30 +408,98 @@ static void set_obstacles(int type)
     else
         pos2 = 0;
 
-    for (int i = 0; i <= 5; i++)
+    for (int i = 0; i < 5; i++)
     {
-        int num = (int)rand() % 5;
+        int num = (int)(rand() % 5 + 3) % 5;
+        num = max(3, num);
+        int diamond = 0;
+        int hole = 0;
         for (int j = 0; j < num; j++)
         {
             Obstacle o;
             int free_positions[] = {0, 0, 0, 0, 0};
-            int positions[] = {0, 2, 4, -2, -4};
+            int positions[] = {4, 2, 0, -2, -4};
             int pos = (int)rand() % 5;
             if (free_positions[pos] == 0)
             {
-                o.x = positions[pos];
-                o.y = 0.5;
-                if (type == 1)
+                free_positions[pos] = 1;
+                int t = (int)rand() % 3;
+                if (t == 0 && !diamond)
                 {
-                    o.z = z_plane - 100 + i * 20;
-                    obstacles1[pos1++] = o;
+                    o.type = 0;
+                    o.y = 0.5;
+                    diamond = 1;
+                }
+                else if (t == 2 && !hole)
+                {
+                    o.type = 2;
+                    o.y = -1;
+                    hole = 1;
                 }
                 else
                 {
-                    o.z = z_plane2 - 100 + i * 20;
-                    obstacles2[pos2++] = o;
+                    o.type = 1;
+                    o.y = 0.5;
                 }
-                printf("%f %f %f\n", o.x, o.y, o.z);
+
+                o.x = positions[pos];
+                if (type == 1)
+                {
+                    o.z = z_plane + 50 - i * 20;
+                    obstacles1[pos1++] = o;
+                    printf("1 : %f %f %f\n", o.x, o.y, o.z);
+                }
+                else
+                {
+                    o.z = z_plane2 + 50 - i * 20;
+                    obstacles2[pos2++] = o;
+                    printf("2 : %f %f %f\n", o.x, o.y, o.z);
+                }
+            }
+        }
+    }
+}
+
+static void set_first()
+{
+    for (int i = 0; i <= 2; i++)
+    {
+        int num = (int)rand() % 5;
+        if (num < 4)
+            num++;
+        int diamond = 0;
+        int hole = 0;
+        for (int j = 0; j < num; j++)
+        {
+            Obstacle o;
+            int free_positions[] = {0, 0, 0, 0, 0};
+            int positions[] = {4, 2, 0, -2, -4};
+            int pos = (int)rand() % 5;
+            if (free_positions[pos] == 0)
+            {
+                free_positions[pos] = 1;
+                int t = (int)rand() % 3;
+                if (t == 0 && !diamond)
+                {
+                    o.type = 0;
+                    o.y = 0.5;
+                    diamond = 1;
+                }
+                else if (t == 2 && !hole)
+                {
+                    o.type = 2;
+                    o.y = -1;
+                    hole = 1;
+                }
+                else
+                {
+                    o.type = 1;
+                    o.y = 0.5;
+                }
+                o.x = positions[pos];
+                o.z = z_plane + 50 - i * 20;
+                obstacles1[pos1++] = o;
+                printf("Prva pozicija %f %f %f\n", o.x, o.y, o.z);
             }
         }
     }
