@@ -12,7 +12,7 @@
 #define max(a, b) a > b ? a : b
 
 /* Imena fajlova sa teksturama. */
-#define FILENAME0 "terra.bmp"
+#define FILENAME0 "sand.bmp"
 #define FILENAME1 "sea.bmp"
 
 /* Identifikatori tekstura. */
@@ -21,7 +21,7 @@ static GLuint names[2];
 // niz koji cuva y koordinate pri skoku loptice
 static float jump_positions[180];
 static int counter = 0;
-static float speed = 0.5;
+static float speed = 0.45;
 
 static int score = 0;
 
@@ -35,7 +35,7 @@ static float lenght = 100;
 
 // koordinate glavnog objekta
 static float x_coord = 0;
-static float y_coord = 0.5;
+static float y_coord = 0.75;
 static float z_coord = 5;
 static float r = 1;
 float rotate_object = 0;
@@ -93,8 +93,9 @@ static void move_objects();
 static void set_first();
 static void set_obstacles(int type);
 
-static float distance(Obstacle o);
 static void resolve_collision();
+
+float absolute(float a);
 
 int main(int argc, char **argv)
 {
@@ -487,16 +488,16 @@ static void draw_plane()
 
 static void draw_main_object()
 {
-    // preuzeta bronzana boja sa neta
-    GLfloat material_ambient[] = {0.2125, 0.1275, 0.054, 1.0};
-    GLfloat material_diffuse[] = {0.714, 0.4284, 0.18144, 1.0};
-    GLfloat material_specular[] = {0.393548, 0.271906, 0.166721, 1.0};
-    GLfloat shininess = 60;
+    GLfloat material_emission[] = {0.3, 0.2, 0.2, 0};
+    GLfloat material_diffuse[] = {0.1, 0.5, 0.8, 1};
+    GLfloat no_material[] = {0, 0, 0, 1};
+    GLfloat no_shininess[] = {0};
 
-    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_AMBIENT, no_material);
     glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
-    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
-    glMaterialf(GL_FRONT, GL_SHININESS, shininess);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, no_material);
+    glMaterialfv(GL_FRONT, GL_SHININESS, no_shininess);
+    glMaterialfv(GL_FRONT, GL_EMISSION, material_emission);
 
     glPushMatrix();
     glTranslatef(x_coord, y_coord, z_coord + 2);
@@ -638,26 +639,13 @@ static void draw_obstacles(int type)
             glPopMatrix();
         }
         // ako je tip prepreke 1 crta se obicna kocka
-        else if (o.type == 1)
+        else
         {
             glPushMatrix();
             glTranslatef(o.x, o.y, o.z);
             glScalef(2, 2, 2);
             glutSolidCube(1);
             glPopMatrix();
-        }
-        // ako je tip prepreke 2 crta se rupa
-        else if (o.type == 2)
-        {
-            //FIXME: popravi velicinu rupe kad namestis da se lepo iscrtava
-            glDisable(GL_LIGHTING);
-            glColor3f(0, 0, 0);
-            glPushMatrix();
-            glTranslatef(o.x, o.y, o.z);
-            glScalef(2, 1.6, 2);
-            glutSolidCube(1);
-            glPopMatrix();
-            glEnable(GL_LIGHTING);
         }
     }
 }
@@ -675,7 +663,6 @@ static void set_obstacles(int type)
         if (num == 0)
             num = 2;
         int diamond = 0;
-        int hole = 0;
         int free_positions[] = {0, 0, 0, 0, 0};
         for (int j = 0; j < num; j++)
         {
@@ -685,23 +672,17 @@ static void set_obstacles(int type)
             if (free_positions[pos] == 0)
             {
                 free_positions[pos] = 1;
-                int t = (int)rand() % 3;
+                int t = (int)rand() % 2;
                 if (t == 0 && !diamond)
                 {
                     o.type = 0;
                     o.y = 0.5;
                     diamond = 1;
                 }
-                else if (t == 2 && !hole)
-                {
-                    o.type = 2;
-                    o.y = -0.9;
-                    hole = 1;
-                }
                 else
                 {
                     o.type = 1;
-                    o.y = 0.5;
+                    o.y = 0.75;
                 }
 
                 o.x = positions[pos];
@@ -728,7 +709,6 @@ static void set_first()
         if (num < 4)
             num++;
         int diamond = 0;
-        int hole = 0;
         int free_positions[] = {0, 0, 0, 0, 0};
         for (int j = 0; j < num; j++)
         {
@@ -738,23 +718,17 @@ static void set_first()
             if (free_positions[pos] == 0)
             {
                 free_positions[pos] = 1;
-                int t = (int)rand() % 3;
+                int t = (int)rand() % 2;
                 if (t == 0 && !diamond)
                 {
                     o.type = 0;
                     o.y = 0.5;
                     diamond = 1;
                 }
-                else if (t == 2 && !hole)
-                {
-                    o.type = 2;
-                    o.y = -0.9;
-                    hole = 1;
-                }
                 else
                 {
                     o.type = 1;
-                    o.y = 0.5;
+                    o.y = 0.75;
                 }
                 o.x = positions[pos];
                 o.z = z_plane + 50 - i * 20;
@@ -764,59 +738,66 @@ static void set_first()
     }
 }
 
-static float distance(Obstacle o)
+float absolute(float a)
 {
-    float x = powf((o.x - x_coord), 2);
-    float y = powf((o.y - y_coord), 2);
-    float z = powf((o.z - z_coord), 2);
-
-    return sqrtf(x + y + z);
+    if (a < 0)
+        return -a;
+    else
+        return a;
 }
 
 static void resolve_collision()
 {
-    // if (z_plane < z_plane2)
-    // {
-    //     for (int i = 0; i < pos1; i++)
-    //     {
-    //         if (distance(obstacles1[i]) <= 2)
-    //         {
-    //             if (obstacles1[i].type == 0)
-    //             {
-    //                 score++;
-    //                 printf("Score %d\n", score);
-    //             }
-    //             else if (obstacles1[i].type == 1)
-    //             {
-    //                 printf("%f %f %f\n", obstacles1[i].x, obstacles1[i].y, obstacles1[i].z);
-    //                 printf("%f %f %f\n", x_coord, y_coord, z_coord);
-    //                 start = 0;
-    //             }
-    //             else
-    //                 start = 0;
-    //         }
-    //     }
-    // }
-    // else
-    // {
-    //     for (int i = 0; i < pos2; i++)
-    //     {
-    //         if (distance(obstacles2[i]) <= 2)
-    //         {
-    //             if (obstacles2[i].type == 0)
-    //             {
-    //                 score++;
-    //                 printf("Score %d\n", score);
-    //             }
-    //             else if (obstacles2[i].type == 1)
-    //             {
-    //                 printf("%f %f %f\n", obstacles2[i].x, obstacles2[i].y, obstacles2[i].z);
-    //                 printf("%f %f %f\n", x_coord, y_coord, z_coord);
-    //                 start = 0;
-    //             }
-    //             else
-    //                 start = 0;
-    //         }
-    //     }
-    // }
+    if (z_plane < z_plane2)
+    {
+        for (int i = 0; i < pos1; i++)
+        {
+            Obstacle o = obstacles1[i];
+            float x = powf((o.x - x_coord), 2);
+            float y = powf((o.y - y_coord), 2);
+            float z = powf((o.z - z_coord - 1.5), 2);
+            if (x < 4 && z < 4)
+            {
+                if (obstacles1[i].type == 0)
+                {
+                    score++;
+                    printf("Score %d\n", score);
+                }
+                else if (obstacles1[i].type == 1)
+                {
+                    printf("%f %f %f\n", obstacles1[i].x, obstacles1[i].y, obstacles1[i].z);
+                    printf("%f %f %f\n", x_coord, y_coord, z_coord);
+                    start = 0;
+                }
+                else
+                    start = 0;
+            }
+        }
+    }
+    else
+    {
+        for (int i = 0; i < pos2; i++)
+        {
+            Obstacle o = obstacles2[i];
+            float x = powf((o.x - x_coord), 2);
+            float y = powf((o.y - y_coord), 2);
+            float z = powf((o.z - z_coord - 1.5), 2);
+            if (x < 4 && z < 4)
+            {
+                if (obstacles2[i].type == 0)
+                {
+                    score++;
+                    printf("Score %d\n", score);
+                }
+                else if (obstacles2[i].type == 1)
+                {
+                    printf("%f %f %f\n", obstacles2[i].x, obstacles2[i].y, obstacles2[i].z);
+                    printf("%f %f %f\n", x_coord, y_coord, z_coord);
+                    start = 0;
+                }
+                else
+                    start = 0;
+            }
+        }
+    }
 }
