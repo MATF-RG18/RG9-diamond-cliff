@@ -3,18 +3,27 @@
 #include <GL/glut.h>
 #include <time.h>
 #include <math.h>
+#include "image.h"
 
 #define TIMER_ID1 0
+#define ID_JUMP 1
 #define PI 3.14
 
 #define max(a, b) a > b ? a : b
 
-// ugao za koji ce loptica da se pomera pri skoku
-static float fi = 0;
-static float jump_speed = 0.1;
+/* Imena fajlova sa teksturama. */
+#define FILENAME0 "terra.bmp"
+#define FILENAME1 "sea.bmp"
 
+/* Identifikatori tekstura. */
+static GLuint names[2];
+
+// niz koji cuva y koordinate pri skoku loptice
+static float jump_positions[180];
+static int counter = 0;
 static float speed = 0.5;
-static float counter = 0;
+
+static int score = 0;
 
 // indikatori za pocetak i kraj igre
 static int start = 0;
@@ -26,7 +35,7 @@ static float lenght = 100;
 
 // koordinate glavnog objekta
 static float x_coord = 0;
-static float y_coord = 0;
+static float y_coord = 0.5;
 static float z_coord = 5;
 static float r = 1;
 float rotate_object = 0;
@@ -38,6 +47,15 @@ static float z_plane = 50;
 static float x_plane2 = 10;
 static float y_plane2 = 1;
 static float z_plane2 = 150;
+
+static float width = 30;
+
+static float z_coord_left_first = 50;
+static float z_coord_right_first = 50;
+static float z_coord_left_second = 150;
+static float z_coord_right_second = 150;
+
+static int possible_moves[] = {0, 0};
 
 // svaka prepreka sadrzi kordinate i tip
 // 0 - dijamant
@@ -60,6 +78,7 @@ static int pos2;
 static void on_keyboard(unsigned char key, int x, int y);
 static void on_reshape(int width, int height);
 static void on_display(void);
+static void on_release(unsigned char key, int x, int y);
 
 static void initialize(int argc, char **argv);
 static void set_camera();
@@ -73,6 +92,9 @@ static void draw_obstacles(int type);
 static void move_objects();
 static void set_first();
 static void set_obstacles(int type);
+
+static float distance(Obstacle o);
+static void resolve_collision();
 
 int main(int argc, char **argv)
 {
@@ -92,10 +114,69 @@ static void initialize(int argc, char **argv)
     glutInitWindowPosition(100, 100);
     glutCreateWindow("Diamond cliff");
 
+    int k = 0;
+    for (float i = 0; i <= 18; i += 0.1)
+        jump_positions[k++] = 2 * sin(i);
+
+    Image *image;
+
+    /* Ukljucuju se teksture. */
+    glEnable(GL_TEXTURE_2D);
+
+    glTexEnvf(GL_TEXTURE_ENV,
+              GL_TEXTURE_ENV_MODE,
+              GL_REPLACE);
+
+    /*
+     * Inicijalizuje se objekat koji ce sadrzati teksture ucitane iz
+     * fajla.
+     */
+    image = image_init(0, 0);
+
+    /* Kreira se prva tekstura. */
+    image_read(image, FILENAME0);
+
+    /* Generisu se identifikatori tekstura. */
+    glGenTextures(2, names);
+
+    glBindTexture(GL_TEXTURE_2D, names[0]);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
+                 image->width, image->height, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, image->pixels);
+
+    /* Kreira se druga tekstura. */
+    image_read(image, FILENAME1);
+
+    glBindTexture(GL_TEXTURE_2D, names[1]);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
+                 image->width, image->height, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, image->pixels);
+
+    /* Iskljucujemo aktivnu teksturu */
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    /* Unistava se objekat za citanje tekstura iz fajla. */
+    image_done(image);
+
     // Registruju se callback funkcije
     glutKeyboardFunc(on_keyboard);
     glutReshapeFunc(on_reshape);
     glutDisplayFunc(on_display);
+    glutKeyboardUpFunc(on_release);
 
     srand(time(NULL));
 
@@ -130,13 +211,13 @@ static void on_keyboard(unsigned char key, int x, int y)
     case 'a':
     case 'A':
         // pomeranje u levo
-        x_coord += 1;
+        possible_moves[0] = 1;
         glutPostRedisplay();
         break;
     case 'd':
     case 'D':
         // pomeranje u desno
-        x_coord -= 1;
+        possible_moves[1] = 1;
         glutPostRedisplay();
         break;
     case 'w':
@@ -144,7 +225,7 @@ static void on_keyboard(unsigned char key, int x, int y)
         // skok
         if (!jump)
         {
-            glutTimerFunc(50, on_jump, 0);
+            glutTimerFunc(50, on_jump, ID_JUMP);
             jump = 1;
         }
         glutPostRedisplay();
@@ -176,7 +257,6 @@ static void on_display(void)
     // a zatim se ostale prepreke postavljaju u tajmeru
     if (!start)
     {
-        printf("Postavljam prvi");
         set_first();
         set_obstacles(2);
     }
@@ -186,6 +266,21 @@ static void on_display(void)
     draw_obstacles(2);
 
     glutSwapBuffers();
+}
+
+static void on_release(unsigned char key, int x, int y)
+{
+    switch (key)
+    {
+    case 'a':
+    case 'A':
+        possible_moves[0] -= 1;
+        break;
+    case 'd':
+    case 'D':
+        possible_moves[1] -= 1;
+        break;
+    }
 }
 
 static void set_camera()
@@ -211,38 +306,181 @@ static void set_lights()
 
 static void draw_plane()
 {
-    // preuzeta boja sa neta
-    GLfloat material_ambient[] = {0.0, 0.0, 0.0, 1.0};
-    GLfloat material_diffuse[] = {0.1, 0.35, 0.1, 1.0};
-    GLfloat material_specular[] = {0.45, 0.55, 0.45, 1.0};
-    GLfloat material_emission[] = {0, 0, 0, 0};
-    GLfloat shininess = 0.25;
-
-    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
-    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
-    glMaterialfv(GL_FRONT, GL_EMISSION, material_emission);
-    glMaterialf(GL_FRONT, GL_SHININESS, shininess);
-
+    // prva ravan
     glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D, names[0]);
+    glEnable(GL_TEXTURE_2D);
+
+    glBegin(GL_QUAD_STRIP);
+    glNormal3f(0, 1, 0);
+    int first = 0;
+    int second = 0;
+    for (int i = 0; i <= 5; i++)
+    {
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        glVertex3f(-5, -0.2, z_plane - 50 + i * 20);
+
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        second = (second + 1) % 2;
+        glVertex3f(5, -0.2, z_plane - 50 + i * 20);
+    }
+
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glTranslatef(0, -y_plane / 2, z_plane);
-    glScalef(x_plane, -y_plane / 2, lenght);
+    glScalef(x_plane, y_plane / 2, lenght);
     glutSolidCube(1);
     glPopMatrix();
 
-    GLfloat material_ambient1[] = {0.2125, 0.1275, 0.054, 1.0};
-    GLfloat material_diffuse1[] = {0.714, 0.4284, 0.18144, 1.0};
-    GLfloat material_specular1[] = {0.393548, 0.271906, 0.166721, 1.0};
-    GLfloat shininess1 = 0.2;
-
-    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient1);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse1);
-    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular1);
-    glMaterialf(GL_FRONT, GL_SHININESS, shininess1);
-
+    // druga ravan
     glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D, names[0]);
+    glEnable(GL_TEXTURE_2D);
+    glBegin(GL_QUAD_STRIP);
+    glNormal3f(0, 1, 0);
+    first = 0;
+    second = 0;
+    for (int i = 0; i <= 5; i++)
+    {
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        glVertex3f(-5, -0.2, z_plane2 - 50 + i * 20);
+
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        second = (second + 1) % 2;
+        glVertex3f(5, -0.2, z_plane2 - 50 + i * 20);
+    }
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glTranslatef(0, -y_plane2 / 2, z_plane2);
-    glScalef(x_plane2, -y_plane2 / 2, lenght);
+    glScalef(x_plane2, y_plane2 / 2, lenght);
+    glutSolidCube(1);
+    glPopMatrix();
+
+    // prva ravan desno od glavne
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D, names[1]);
+    glEnable(GL_TEXTURE_2D);
+
+    glBegin(GL_QUAD_STRIP);
+    glNormal3f(0, 1, 0);
+    first = 0;
+    second = 0;
+    for (int i = 0; i <= 5; i++)
+    {
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        glVertex3f(-5, -0.2, z_coord_right_first - 50 + i * 20);
+
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        second = (second + 1) % 2;
+        glVertex3f(-35, -0.2, z_coord_right_first - 50 + i * 20);
+    }
+
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glTranslatef(-20, -y_plane / 2, z_coord_right_first);
+    glScalef(width, y_plane / 2, lenght);
+    glutSolidCube(1);
+    glPopMatrix();
+
+    // // druga ravan desno od glavne
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D, names[1]);
+    glEnable(GL_TEXTURE_2D);
+
+    glBegin(GL_QUAD_STRIP);
+    glNormal3f(0, 1, 0);
+    first = 0;
+    second = 0;
+    for (int i = 0; i <= 5; i++)
+    {
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        glVertex3f(-5, -0.2, z_coord_right_second - 50 + i * 20);
+
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        second = (second + 1) % 2;
+        glVertex3f(-35, -0.2, z_coord_right_second - 50 + i * 20);
+    }
+
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glTranslatef(-20, -y_plane / 2, z_coord_right_second);
+    glScalef(width, y_plane / 2, lenght);
+    glutSolidCube(1);
+    glPopMatrix();
+
+    // prva ravan levo od glavne
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D, names[1]);
+    glEnable(GL_TEXTURE_2D);
+
+    glBegin(GL_QUAD_STRIP);
+    glNormal3f(0, 1, 0);
+    first = 0;
+    second = 0;
+    for (int i = 0; i <= 5; i++)
+    {
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        glVertex3f(5, -0.2, z_coord_left_first - 50 + i * 20);
+
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        second = (second + 1) % 2;
+        glVertex3f(35, -0.2, z_coord_left_first - 50 + i * 20);
+    }
+
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glTranslatef(20, -y_plane / 2, z_coord_left_first);
+    glScalef(width, y_plane / 2, lenght);
+    glutSolidCube(1);
+    glPopMatrix();
+
+    // druga ravan levo od glavne
+    glPushMatrix();
+    glBindTexture(GL_TEXTURE_2D, names[1]);
+    glEnable(GL_TEXTURE_2D);
+
+    glBegin(GL_QUAD_STRIP);
+    glNormal3f(0, 1, 0);
+    first = 0;
+    second = 0;
+    for (int i = 0; i <= 5; i++)
+    {
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        glVertex3f(5, -0.2, z_coord_left_second - 50 + i * 20);
+
+        glTexCoord2f(first, second);
+        first = (first + 1) % 2;
+        second = (second + 1) % 2;
+        glVertex3f(35, -0.2, z_coord_left_second - 50 + i * 20);
+    }
+
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glTranslatef(20, -y_plane / 2, z_coord_left_second);
+    glScalef(width, y_plane / 2, lenght);
     glutSolidCube(1);
     glPopMatrix();
 }
@@ -261,9 +499,9 @@ static void draw_main_object()
     glMaterialf(GL_FRONT, GL_SHININESS, shininess);
 
     glPushMatrix();
-    glTranslatef(x_coord, r, z_coord + 2);
+    glTranslatef(x_coord, y_coord, z_coord + 2);
     glRotatef(rotate_object, 1, 0, 0);
-    glutSolidSphere(r, 50, 50);
+    glutSolidSphere(r, 40, 40);
     glPopMatrix();
 }
 
@@ -274,6 +512,10 @@ static void move_objects(int value)
 
     z_plane -= speed;
     z_plane2 -= speed;
+    z_coord_left_first -= speed;
+    z_coord_left_second -= speed;
+    z_coord_right_first -= speed;
+    z_coord_right_second -= speed;
 
     for (int i = 0; i < pos1; i++)
         obstacles1[i].z -= speed;
@@ -281,9 +523,13 @@ static void move_objects(int value)
     for (int i = 0; i < pos2; i++)
         obstacles2[i].z -= speed;
 
-    //printf("%f %f\n", z_plane, z_plane2);
+    if (possible_moves[0] && x_coord < 4.5)
+        x_coord += 0.2;
 
-    // FIXME: postoji mali razmak izmedju 2 ravni
+    if (possible_moves[1] && x_coord > -4.5)
+        x_coord -= 0.2;
+
+    printf("zplane: %f zplane2: %f\n", z_plane, z_plane2);
 
     //kad jedna ravan izadje iz vidokruga kamere
     //vracamo je na kraj druge ravni i na toj ravni
@@ -291,16 +537,32 @@ static void move_objects(int value)
     if (z_plane + 50 <= 0)
     {
         z_plane = 150;
-        speed += 0.05;
+        //speed += 0.05;
         set_obstacles(1);
-        //printf("Menjam prvu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
     }
     if (z_plane2 + 50 <= 0)
     {
         z_plane2 = 150;
-        speed += 0.05;
+        //speed += 0.05;
         set_obstacles(2);
-        //printf("Menjam drugu ravan, koord1: %f koord2: %f\n", z_plane, z_plane2);
+    }
+
+    if (z_coord_left_first + 50 <= 0)
+    {
+        z_coord_left_first = 150;
+    }
+    if (z_coord_left_second + 50 <= 0)
+    {
+        z_coord_left_second = 150;
+    }
+
+    if (z_coord_right_first + 50 <= 0)
+    {
+        z_coord_right_first = 150;
+    }
+    if (z_coord_right_second + 50 <= 0)
+    {
+        z_coord_right_second = 150;
     }
 
     // rotiramo kuglu sve vreme
@@ -308,33 +570,32 @@ static void move_objects(int value)
     if (rotate_object >= 360)
         rotate_object += -360;
 
+    resolve_collision();
+
     glutPostRedisplay();
     if (start && !end)
         glutTimerFunc(50, move_objects, 0);
 }
 
 // funkcija koja obradjuje skok
-// FIXME : pomera se samo kamera, ne i loptica
 static void on_jump(int value)
 {
-    if (value != 0)
+    if (value != ID_JUMP)
         return;
 
-    if (jump)
+    y_coord = 1 + jump_positions[counter++];
+    printf("%f ", y_coord);
+    // hardkodovano da ne ide dalje kada se loptica spusti na stazu
+    if (counter < 32)
     {
-        fi += jump_speed;
-        if (fi >= PI)
-        {
-            fi = 0;
-            jump = 0;
-        }
-        y_coord = r + 2 * sin(fi);
-        glutPostRedisplay();
+        glutTimerFunc(50, on_jump, ID_JUMP);
     }
-
-    glutPostRedisplay();
-    if (start && !end)
-        glutTimerFunc(50, on_jump, 0);
+    else
+    {
+        y_coord = 1;
+        counter = 0;
+        jump = 0;
+    }
 }
 
 // icrtavamo prepreke razlicitih tipova
@@ -415,10 +676,10 @@ static void set_obstacles(int type)
             num = 2;
         int diamond = 0;
         int hole = 0;
+        int free_positions[] = {0, 0, 0, 0, 0};
         for (int j = 0; j < num; j++)
         {
             Obstacle o;
-            int free_positions[] = {0, 0, 0, 0, 0};
             int positions[] = {4, 2, 0, -2, -4};
             int pos = (int)rand() % 5;
             if (free_positions[pos] == 0)
@@ -434,7 +695,7 @@ static void set_obstacles(int type)
                 else if (t == 2 && !hole)
                 {
                     o.type = 2;
-                    o.y = -1;
+                    o.y = -0.9;
                     hole = 1;
                 }
                 else
@@ -448,13 +709,11 @@ static void set_obstacles(int type)
                 {
                     o.z = z_plane + 50 - i * 10;
                     obstacles1[pos1++] = o;
-                    printf("1 : %f %f %f\n", o.x, o.y, o.z);
                 }
                 else
                 {
                     o.z = z_plane2 + 50 - i * 10;
                     obstacles2[pos2++] = o;
-                    printf("2 : %f %f %f\n", o.x, o.y, o.z);
                 }
             }
         }
@@ -470,10 +729,10 @@ static void set_first()
             num++;
         int diamond = 0;
         int hole = 0;
+        int free_positions[] = {0, 0, 0, 0, 0};
         for (int j = 0; j < num; j++)
         {
             Obstacle o;
-            int free_positions[] = {0, 0, 0, 0, 0};
             int positions[] = {4, 2, 0, -2, -4};
             int pos = (int)rand() % 5;
             if (free_positions[pos] == 0)
@@ -489,7 +748,7 @@ static void set_first()
                 else if (t == 2 && !hole)
                 {
                     o.type = 2;
-                    o.y = -1;
+                    o.y = -0.9;
                     hole = 1;
                 }
                 else
@@ -500,8 +759,64 @@ static void set_first()
                 o.x = positions[pos];
                 o.z = z_plane + 50 - i * 20;
                 obstacles1[pos1++] = o;
-                printf("Prva pozicija %f %f %f\n", o.x, o.y, o.z);
             }
         }
     }
+}
+
+static float distance(Obstacle o)
+{
+    float x = powf((o.x - x_coord), 2);
+    float y = powf((o.y - y_coord), 2);
+    float z = powf((o.z - z_coord), 2);
+
+    return sqrtf(x + y + z);
+}
+
+static void resolve_collision()
+{
+    // if (z_plane < z_plane2)
+    // {
+    //     for (int i = 0; i < pos1; i++)
+    //     {
+    //         if (distance(obstacles1[i]) <= 2)
+    //         {
+    //             if (obstacles1[i].type == 0)
+    //             {
+    //                 score++;
+    //                 printf("Score %d\n", score);
+    //             }
+    //             else if (obstacles1[i].type == 1)
+    //             {
+    //                 printf("%f %f %f\n", obstacles1[i].x, obstacles1[i].y, obstacles1[i].z);
+    //                 printf("%f %f %f\n", x_coord, y_coord, z_coord);
+    //                 start = 0;
+    //             }
+    //             else
+    //                 start = 0;
+    //         }
+    //     }
+    // }
+    // else
+    // {
+    //     for (int i = 0; i < pos2; i++)
+    //     {
+    //         if (distance(obstacles2[i]) <= 2)
+    //         {
+    //             if (obstacles2[i].type == 0)
+    //             {
+    //                 score++;
+    //                 printf("Score %d\n", score);
+    //             }
+    //             else if (obstacles2[i].type == 1)
+    //             {
+    //                 printf("%f %f %f\n", obstacles2[i].x, obstacles2[i].y, obstacles2[i].z);
+    //                 printf("%f %f %f\n", x_coord, y_coord, z_coord);
+    //                 start = 0;
+    //             }
+    //             else
+    //                 start = 0;
+    //         }
+    //     }
+    // }
 }
