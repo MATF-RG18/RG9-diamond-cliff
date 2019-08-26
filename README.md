@@ -1,4 +1,4 @@
-# :rocket: Diamond cliff
+# :gem: Diamond cliff
 ___
 
 ### :memo: Opis igrice:
